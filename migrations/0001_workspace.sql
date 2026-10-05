@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS user_state (user_id TEXT PRIMARY KEY, email TEXT NOT NULL, value TEXT NOT NULL, version INTEGER NOT NULL, updated_at TEXT NOT NULL, write_nonce TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS content (id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('doc','graph')), value TEXT NOT NULL, version INTEGER NOT NULL, updated_by TEXT NOT NULL, updated_at TEXT NOT NULL, write_nonce TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT NOT NULL, action TEXT NOT NULL, record_id TEXT NOT NULL, version INTEGER NOT NULL, at TEXT NOT NULL, value TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS audit_record ON audit(record_id,version);
