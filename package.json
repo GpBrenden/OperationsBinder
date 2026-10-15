@@ -1,0 +1,20 @@
+{
+  "name": "operations-binder-phase1",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/content.test.mjs tests/worker-config.test.mjs",
+    "preview": "node scripts/serve.mjs"
+  },
+  "devDependencies": {
+    "@viz-js/viz": "3.25.0",
+    "marked": "17.0.5",
+    "mermaid": "12.2.0"
+  }
+}

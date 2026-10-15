@@ -1,0 +1,40 @@
+import fs from 'node:fs';import path from 'node:path';import {marked} from 'marked';import {instance} from '@viz-js/viz';import {validate,root} from './validate.mjs';
+const {content:c,summary}=validate(),out=path.join(root,'dist');
+if(path.dirname(out)!==root)throw Error('Unsafe output directory');fs.rmSync(out,{recursive:true,force:true});fs.mkdirSync(out,{recursive:true});
+fs.cpSync(path.join(root,'public'),out,{recursive:true,filter:p=>!p.includes(path.sep+'sources'+path.sep)||!p.endsWith('.md')});
+for(const n of ['index.html','styles.css','app.js','phase1.js','phase1.css'])fs.copyFileSync(path.join(root,'src',n),path.join(out,n));
+fs.copyFileSync(path.join(root,'THIRD_PARTY_NOTICES.txt'),path.join(out,'THIRD_PARTY_NOTICES.txt'));
+const escape=s=>String(s).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
+const docs=c.documents.filter(x=>x.publicationStatus!=='draft'),maps=c.processes.filter(x=>x.publicationStatus!=='draft'),groups=c['process-groups'].filter(x=>x.publicationStatus!=='draft'),refs=c.references.filter(x=>x.publicationStatus!=='draft'),diagrams=c.diagrams.filter(x=>x.publicationStatus!=='draft');
+const visible=new Set([...docs.map(d=>'page:'+d.id),...maps.map(m=>'process:'+m.id),...groups.map(g=>'group:'+g.id),...refs.map(r=>'reference:'+r.id),...diagrams.map(d=>'diagram:'+d.id),...c.stops.map(s=>'stop:'+s.id),...c.gaps.map(g=>'gap:'+g.id)]);
+const renderer=new marked.Renderer();renderer.html=({text})=>escape(text);renderer.link=function({href,tokens}){const text=this.parser.parseInline(tokens);return /^(?:https?:|mailto:|#|[^:]*$)/i.test(href)?`<a href="${escape(href)}">${text}</a>`:text;};renderer.code=({text,lang})=>lang==='mermaid'?`<details><summary>Retained Mermaid source</summary><pre>${escape(text)}</pre><p>Open the source diagram links beside this page to render the original flow.</p></details>`:`<pre><code>${escape(text)}</code></pre>`;
+marked.use({renderer});
+const referenceIssues=[];
+for(const d of docs){d.body=fs.readFileSync(path.join(root,d.contentFile),'utf8');let body=d.body.replace(/(!?)\[\[([^\]]+)\]\]/g,(_,embed,raw)=>{const [target,alias]=raw.split('|'),key=target.replace(/\.md$/,'');if(target.includes('/_Assets/')){const asset='binder-original/_Assets/'+target.split('/').pop();if(fs.existsSync(path.join(out,asset)))return `${embed}[${alias||path.basename(target)}](${encodeURI(asset)})`;}
+ const found=docs.find(x=>key.endsWith(x.source.replace(/\.md$/,'')));if(!found)referenceIssues.push({page:d.id,reference:target,issue:'Linked source not supplied; displayed as text, not a broken link.'});return found?`[${alias||found.title}](#doc/${found.id})`:`${alias||target.split('/').pop()} (source reference not supplied)`;});
+ d.html=marked.parse(body);d.dept=d.department;fs.mkdirSync(path.join(out,'sources'),{recursive:true});fs.writeFileSync(path.join(out,'sources',d.id+'.md'),d.body);
+}
+for(const m of maps)m.dept=m.department;
+for(const g of diagrams)if(g.format==='mermaid'){
+ g.mermaid=fs.readFileSync(path.join(root,g.sourceFile),'utf8');fs.mkdirSync(path.join(out,'diagrams/source'),{recursive:true});fs.writeFileSync(path.join(out,'diagrams/source',g.id+'.mmd'),g.mermaid);
+}
+const palette={nav:['#eaf3ff','#327ac3','#174b7d'],doc:['#edf8f0','#398456','#215c36'],gap:['#fff6dc','#b6871d','#77550c'],flow:['#f1f3f5','#7c8892','#4d5b66'],stop:['#fff0ef','#bf4841','#902c27']};
+const q=s=>JSON.stringify(String(s)),wrap=t=>{let lines=[],line='';for(const w of t.split(/\s+/)){if((line+' '+w).length>30&&line){lines.push(line);line=w;}else line+=(line?' ':'')+w;}if(line)lines.push(line);return lines.join('\n');};
+const viz=await instance(),charts={};
+const drawio=diagrams.find(g=>g.format==='drawio');const drawioLinks={ov_nav_title:'#home',ov_btn_ov:'#home',ov_btn_rec:'#dept/Receiving',ov_btn_inv:'#dept/Inventory',ov_btn_ful:'#dept/Fulfillment',ov_btn_trn:'#dept/Transportation',dept_rec:'#dept/Receiving',dept_inv:'#dept/Inventory',dept_ful:'#dept/Fulfillment',dept_trn:'#dept/Transportation',ov_btn_fac:'#review',ov_matrix_btn:'#review',ov_summary:'#review'};
+const chartInputs=[...maps,...(drawio?[{...drawio,nodes:drawio.nodes.map(n=>({...n,status:drawioLinks[n.id]?.startsWith('#dept')?'nav':/matrix|fac/.test(n.id)?'gap':'flow',href:drawioLinks[n.id]||'#review'}))}]:[])];
+for(const m of chartInputs){let dot='digraph G {graph [rankdir=TB,bgcolor="transparent",nodesep=.3,ranksep=.55,pad=.22,splines=polyline];node [fontname="Arial",fontsize=13,shape=box,style="rounded,filled",penwidth=1.5,margin=".16,.12"];edge [fontname="Arial",fontsize=11,color="#8196a5",fontcolor="#526d7d",arrowsize=.7,penwidth=1.35];';
+ for(const n of m.nodes){const [fill,stroke,ink]=palette[n.status];dot+=q(n.id)+' [id='+q('branch-node-'+n.id)+',label='+q(wrap(n.label))+',tooltip='+q(n.label+' — '+n.status)+',URL='+q(n.href||'#map/'+m.id+'/node-'+n.id)+',fillcolor='+q(fill)+',color='+q(stroke)+',fontcolor='+q(ink)+(n.decision?',shape=diamond,style=filled':'')+'];';}
+ for(const e of m.edges)dot+=q(e.source)+' -> '+q(e.target)+' [label='+q(e.label||'')+'];';dot+='}';
+ let svg=viz.renderString(dot,{format:'svg'}).replace(/<\?xml[^>]+>/,'').replace(/<!DOCTYPE[\s\S]*?>/,'').replace(/width="([\d.]+)pt" height="([\d.]+)pt"/,(_,w,h)=>`width="${+w*1.25}" height="${+h*1.25}"`);svg=svg.replace('<svg ',`<svg role="img" aria-label="${escape(m.title)} — branches and return paths" `);charts[m.id]={svg,nodes:m.nodes.length,edges:m.edges.length};
+}
+const data={docs,maps,depts:c.departments.map(x=>x.id),stops:c.stops.filter(s=>maps.some(m=>m.id===s.map)),gaps:c.gaps.filter(g=>maps.some(m=>m.id===g.map)),sources:c['source-links'],review:c.settings.reviewNotes,meta:{settings:c.settings,tags:c.tags,departments:c.departments,groups,references:refs,diagrams,relationships:c.relationships.filter(r=>visible.has(r.from)&&visible.has(r.to)),onboarding:c.onboarding.filter(p=>p.publicationStatus!=='draft'),sourceReview:c['source-review']}};
+fs.writeFileSync(path.join(out,'data.js'),'// Generated from content/*.json and content/pages/*.md. Do not edit.\nconst DATA='+JSON.stringify(data)+';');fs.writeFileSync(path.join(out,'branches.js'),'// Generated from content/processes.json.\nconst BRANCHES='+JSON.stringify(charts)+';');
+fs.mkdirSync(path.join(out,'content'),{recursive:true});for(const [name,records]of Object.entries({documents:docs.map(({body,html,dept,...d})=>d),processes:maps.map(({dept,...m})=>m),'process-groups':groups,references:refs,diagrams:diagrams.map(({mermaid,...g})=>g),relationships:data.meta.relationships,tags:c.tags,onboarding:data.meta.onboarding,stops:data.stops,gaps:data.gaps,departments:c.departments}))fs.writeFileSync(path.join(out,'content',name+'.json'),JSON.stringify(records,null,2));
+// Bundled Mermaid runs entirely in the browser, with no CDN or external calls.
+const vendor=path.join(out,'vendor/mermaid');fs.mkdirSync(vendor,{recursive:true});const source=path.join(root,'node_modules/mermaid/dist');fs.cpSync(source,vendor,{recursive:true,filter:p=>fs.statSync(p).isDirectory()||p.endsWith('.mjs')||p.endsWith('LICENSE')});
+fs.copyFileSync(path.join(root,'node_modules/mermaid/LICENSE'),path.join(vendor,'LICENSE'));
+fs.writeFileSync(path.join(out,'build-validation.json'),JSON.stringify({...summary,renderedMaps:Object.keys(charts).length,sourceConnections:maps.reduce((n,m)=>n+m.edges.length,0),database:false,authentication:false},null,2));
+fs.writeFileSync(path.join(out,'reference-coverage.json'),JSON.stringify({missingSourceReferences:referenceIssues,coreGroupGaps:groups.filter(g=>g.coverage!=='documented').map(g=>({id:g.id,title:g.title,department:g.department,gap:g.documentationGap})),unknownApprovalRecords:recordsCount(),note:'Unprovided source references are not fabricated or emitted as broken links.'},null,2));
+function recordsCount(){return [...docs,...maps,...groups,...refs,...diagrams].filter(r=>r.reviewStatus==='unknown').length;}
+console.log(`Built dist/: ${docs.length} source pages, ${maps.length} maps, ${refs.length} file references, ${diagrams.length} source diagrams.`);

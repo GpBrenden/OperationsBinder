@@ -1,0 +1,11 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {validate} from '../scripts/validate.mjs';
+const base=validate().content,copy=()=>structuredClone(base);
+test('Existing source references and process records remain available',()=>{assert.ok(validate().summary.documents>=94);assert.ok(validate().summary.processes>=62);assert.ok(base.onboarding.length>=5);for(let i=0;i<58;i++)assert.ok(base.documents.some(d=>d.id==='d'+String(i).padStart(2,'0')));});
+test('Unknown review does not acquire inferred approval dates',()=>{assert.ok(base.documents.filter(d=>d.reviewStatus==='unknown').every(d=>d.lastReviewedDate===null));});
+test('Broken relationships fail validation',()=>{const c=copy();c.relationships.push({from:'process:missing',to:'page:d00',type:'procedure',evidence:'QA'});assert.throws(()=>validate(c),/Dangling relationship/);});
+test('Uncatalogued tags fail validation',()=>{const c=copy();c.documents[0].tags.push('unreviewed-new-topic');assert.throws(()=>validate(c),/Unknown tag/);});
+test('Public instructions require explicit approval',()=>{const c=copy();c.documents[0].publicationStatus='published';assert.throws(()=>validate(c),/not approved/);});
+test('Unreviewed onboarding cannot declare mandatory requirements',()=>{const c=copy();c.onboarding[0].items[0].requirement='mandatory';assert.throws(()=>validate(c),/mandatory/);});
+test('Invalid graph connections fail validation',()=>{const c=copy();c.processes[0].edges.push({source:'MISSING',target:'A'});assert.throws(()=>validate(c),/Invalid graph endpoint/);});
+test('Approved labels need ownership and review evidence',()=>{const c=copy();c.documents[0].reviewStatus='approved';assert.throws(()=>validate(c),/requires reviewer/);});
+test('Public graph links cannot reference draft procedures',()=>{const c=copy();const m=c.processes.find(m=>m.nodes.some(n=>(n.link||'').includes('/sources/'))),n=m.nodes.find(n=>(n.link||'').includes('/sources/')),id=c['source-links'][n.link.split('/').pop()];c.documents.find(d=>d.id===id).publicationStatus='draft';assert.throws(()=>validate(c),/points to draft/);});

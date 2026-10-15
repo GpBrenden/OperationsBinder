@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://binders.doyles-sheehan.com/schemas/record.schema.json",
+  "title": "Operations reference metadata",
+  "type": "object",
+  "required": [
+    "id",
+    "title",
+    "department",
+    "warehouseApplicability",
+    "documentType",
+    "tags",
+    "documentationStatus",
+    "processOwner",
+    "reviewStatus",
+    "lastReviewedDate",
+    "publicationStatus",
+    "source",
+    "trainingRequired"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9-]*$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "department": {
+      "type": "string"
+    },
+    "warehouseApplicability": {
+      "enum": [
+        "MT",
+        "ID",
+        "Both",
+        "Unknown"
+      ]
+    },
+    "applicabilityReviewStatus": {
+      "enum": [
+        "unknown",
+        "verified"
+      ]
+    },
+    "documentType": {
+      "type": "string"
+    },
+    "processCategory": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 5,
+      "uniqueItems": true
+    },
+    "documentationStatus": {
+      "enum": [
+        "documented",
+        "review-needed",
+        "documentation-needed",
+        "flow-only"
+      ]
+    },
+    "processOwner": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reviewStatus": {
+      "enum": [
+        "unknown",
+        "proposed",
+        "needs-review",
+        "verified",
+        "approved"
+      ]
+    },
+    "lastReviewedDate": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "publicationStatus": {
+      "enum": [
+        "draft",
+        "reference",
+        "published"
+      ]
+    },
+    "trainingRequired": {
+      "enum": [
+        "unknown",
+        "not-established",
+        "source-documented",
+        "suggested"
+      ]
+    },
+    "source": {
+      "type": "string"
+    },
+    "relatedProcesses": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "prerequisites": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "nextProcess": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "relatedPoliciesAndForms": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
